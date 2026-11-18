@@ -1,0 +1,15 @@
+# Secrets / token - KHÔNG commit
+credentials.json
+playground_token.json
+token.json
+token_cache.json
+config.json
+*.session
+*.session-journal
+
+# Dữ liệu lấy về
+notifications.json
+
+.venv/
+__pycache__/
+.idea/

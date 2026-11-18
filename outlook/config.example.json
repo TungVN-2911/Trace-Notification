@@ -1,0 +1,4 @@
+{
+    "client_id": "<Application (client) ID trên Entra>",
+    "authority": "https://login.microsoftonline.com/consumers"
+}

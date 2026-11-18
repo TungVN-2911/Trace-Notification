@@ -1,0 +1,8 @@
+{
+    "api_id": 123456,
+    "api_hash": "<api_hash từ my.telegram.org>",
+    "phone": "+84xxxxxxxxx",
+    "include_groups": true,
+    "include_channels": true,
+    "include_outgoing": false
+}

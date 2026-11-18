@@ -1,0 +1,6 @@
+{
+    "page_id": "<ID của Fanpage>",
+    "page_access_token": "<Page Access Token dài hạn>",
+    "graph_version": "v24.0",
+    "include_outgoing": false
+}

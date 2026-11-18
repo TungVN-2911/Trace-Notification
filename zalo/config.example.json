@@ -1,0 +1,6 @@
+{
+    "app_id": "<app_id từ developers.zalo.me>",
+    "secret_key": "<secret_key của app>",
+    "redirect_uri": "https://your-domain.com/zalo/callback",
+    "include_outgoing": false
+}

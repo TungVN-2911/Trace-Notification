@@ -1,0 +1,6 @@
+{
+    "partner_id": 1000000,
+    "partner_key": "<partner_key từ Shopee Open Platform>",
+    "redirect_url": "https://your-domain.com/shopee/callback",
+    "env": "live"
+}
