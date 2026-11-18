@@ -29,7 +29,7 @@ from pathlib import Path
 
 from pywinauto import Desktop
 
-from main import phone_notification  # windows_notifications/main.py
+from main import phone_notification, save  # windows_notifications/main.py
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -277,11 +277,7 @@ def main():
             added += 1
             print(f"[{item['source']}] {item['from'][:40]}: {item['snippet'][:60]}")
 
-    items.sort(key=lambda n: n["receivedAt"] or "", reverse=True)
-    OUTPUT_FILE.write_text(
-        json.dumps(items, ensure_ascii=False, indent=4),
-        encoding="utf-8"
-    )
+    save(items, OUTPUT_FILE)
 
     print(f"\nThêm {added} thông báo. Tổng {len(items)} -> {OUTPUT_FILE}")
 

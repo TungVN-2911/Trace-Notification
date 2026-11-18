@@ -131,19 +131,32 @@ def filetime_to_iso(value):
     return (FILETIME_EPOCH + timedelta(microseconds=int(value) / 10)).isoformat()
 
 
-def snapshot_db():
-    """Copy DB + WAL sang thư mục tạm để đọc an toàn (Windows đang giữ file)."""
+class DatabaseBusy(Exception):
+    """Windows đang khoá DB (đang ghi thông báo mới) - thử lại lượt sau."""
+
+
+def snapshot_db(retries=5):
+    """
+    Copy DB + WAL sang thư mục tạm để đọc an toàn.
+    Windows khoá tạm một phần file khi đang ghi (WinError 33) -> thử lại.
+    """
 
     if not DB_FILE.exists():
         raise FileNotFoundError(f"Không thấy {DB_FILE}")
 
-    tmp = Path(tempfile.mkdtemp(prefix="wpn_"))
-    for suffix in ("", "-wal", "-shm"):
-        src = DB_DIR / f"wpndatabase.db{suffix}"
-        if src.exists():
-            shutil.copy2(src, tmp / src.name)
+    for attempt in range(retries):
+        tmp = Path(tempfile.mkdtemp(prefix="wpn_"))
+        try:
+            for suffix in ("", "-wal", "-shm"):
+                src = DB_DIR / f"wpndatabase.db{suffix}"
+                if src.exists():
+                    shutil.copyfile(src, tmp / src.name)
+            return tmp
+        except OSError:
+            shutil.rmtree(tmp, ignore_errors=True)
+            time.sleep(0.2 * (attempt + 1))
 
-    return tmp
+    raise DatabaseBusy("DB thông báo đang bị Windows khoá")
 
 
 def read_toasts():
@@ -151,13 +164,18 @@ def read_toasts():
 
     try:
         conn = sqlite3.connect(tmp / "wpndatabase.db")
-        rows = conn.execute("""
-            SELECT n.Id, h.PrimaryId, n.Payload, n.ArrivalTime, n.Tag, n.[Group]
-            FROM Notification n
-            JOIN NotificationHandler h ON h.RecordId = n.HandlerId
-            WHERE n.Type = 'toast'
-        """).fetchall()
-        conn.close()
+        try:
+            rows = conn.execute("""
+                SELECT n.Id, h.PrimaryId, n.Payload, n.ArrivalTime, n.Tag, n.[Group]
+                FROM Notification n
+                JOIN NotificationHandler h ON h.RecordId = n.HandlerId
+                WHERE n.Type = 'toast'
+            """).fetchall()
+        except sqlite3.DatabaseError as error:
+            # Bản copy lệch giữa DB và WAL (copy đúng lúc Windows đang ghi)
+            raise DatabaseBusy(f"Bản sao DB chưa nhất quán: {error}") from error
+        finally:
+            conn.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -305,12 +323,26 @@ def load_existing():
     return []
 
 
-def save(items):
+def save(items, path=OUTPUT_FILE):
+    """Ghi ra file tạm rồi thay thế -> bị tắt giữa chừng cũng không hỏng file."""
+
     items.sort(key=lambda n: n["receivedAt"] or "", reverse=True)
-    OUTPUT_FILE.write_text(
+
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(
         json.dumps(items, ensure_ascii=False, indent=4),
         encoding="utf-8"
     )
+
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            # File đang bị chương trình khác mở (IDE, antivirus) -> thử lại
+            time.sleep(0.2 * (attempt + 1))
+
+    raise PermissionError(f"Không ghi được {path} (đang bị chương trình khác giữ)")
 
 
 def collect_once(items, seen):
@@ -379,10 +411,19 @@ def main():
 
     print("Đang theo dõi thông báo Windows... (Ctrl+C để dừng)\n")
     total = 0
+    busy_rounds = 0
 
     try:
         while True:
-            total += len(collect_once(items, seen))
+            try:
+                total += len(collect_once(items, seen))
+                busy_rounds = 0
+            except (DatabaseBusy, PermissionError) as error:
+                # Lỗi tạm thời -> bỏ qua lượt này, không dừng script
+                busy_rounds += 1
+                if busy_rounds % 10 == 1:
+                    print(f"(bỏ qua lượt quét: {error})")
+
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
